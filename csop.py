@@ -46,7 +46,7 @@ class CSOP:
     eps_optimizers : list of dict
         Accumulated results from all :meth:`computeEpsOptimizer` calls.
         Each entry has keys ``"y_choice"``, ``"eps"``, ``"x"``, ``"approx"``,
-        ``"gamma_upper_bound"`` (alias ``"L_upper_bound"``).
+        ``"gamma_upper_bound"``.
     """
 
     # instance attributes
@@ -104,7 +104,6 @@ class CSOP:
             ``"x"``        – optimal decision vector x* ∈ R^n.
             ``"approx"``   – :class:`~epsopt.approximation.Approximation` of F(x*).
             ``"gamma_upper_bound"`` – computable upper bound for γ from final normals.
-            ``"L_upper_bound"``     – same value as alias to match theory notation.
         """
         y = np.asarray(y, dtype=float).ravel()
         if y.shape != (self.graph.q,):
@@ -158,7 +157,7 @@ class CSOP:
             on_iteration(0, copy.deepcopy(self._approximation))
 
         W: set[tuple] = set()
-        _iter = 0
+        _iter = 1
 
         while True:
             N = self._approximation.normals
@@ -226,7 +225,6 @@ class CSOP:
             if not self._in_eps_approximation(self.y_star, eps/2):
                 self._approximation.add_vertex(self.y_star)
                 self._approximation.updateFeasPoint(self.x_star)
-                self._cp = CP(self.graph, self._approximation, np.ones(self.graph.q))
                 N = self._approximation.normals
                 if on_iteration is not None:
                     on_iteration(_iter, copy.deepcopy(self._approximation))
@@ -566,7 +564,7 @@ class CSOP:
 
     def __repr__(self) -> str:
         return (
-            f"CSOP(graph={self.graph.name!r}"
+            f"CSOP(graph={self.graph.name!r})"
         )
     
 

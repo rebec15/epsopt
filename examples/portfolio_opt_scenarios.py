@@ -32,11 +32,11 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from epsopt_v2.graph import Graph
-from epsopt_v2.csop import CSOP
-from epsopt_v2.approximation import Approximation
-from epsopt_v2.convex_set import ConvexSet
-from epsopt_v2.convex_set_approximator import ConvexSetApproximator
+from epsopt.graph import Graph
+from epsopt.csop import CSOP
+from epsopt.approximation import Approximation
+from epsopt.convex_set import ConvexSet
+from epsopt.convex_set_approximator import ConvexSetApproximator
 
 
 class PortfolioOptScen:

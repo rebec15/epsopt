@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..",".."))
 
 import numpy as np
-from epsopt_v2 import Graph, CSOP
+from epsopt import Graph, CSOP
 
 # Define graph
 # n=1: x ∈ R, q=2: y ∈ R^2, no shadow (m=0)

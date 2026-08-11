@@ -165,11 +165,3 @@ class CP(SubProblem):
             "y": self.y.value,
         }
         return self.solution
-
-    @property
-    def solve_count(self) -> int:
-        '''returns number of times IP has been solved. Currently unused.'''
-        return self._solvecount
-
-    def reset_solve_count(self) -> None:
-        self._solvecount = 0

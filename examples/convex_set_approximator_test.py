@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from epsopt_v2 import ConvexSet, ConvexSetApproximator
+from epsopt import ConvexSet, ConvexSetApproximator
 
 
 def build_set() -> ConvexSet:
@@ -117,7 +117,7 @@ def build_unbounded_orthant_3d_set() -> ConvexSet:
 
 
 def main() -> None:
-    eps = 0.1
+    eps = 0.01
     tests = np.array([False, True, False, False, False], dtype=bool)  # choose test sets
 
     if(tests[0]):

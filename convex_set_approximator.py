@@ -3,9 +3,7 @@ from __future__ import annotations
 from typing import Any, List, Optional, cast
 
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from .csop import CSOP
 from .approximation import Approximation
@@ -540,6 +538,9 @@ class ConvexSetApproximator:
         ax : matplotlib axis, optional
             Target axis. If omitted, a new figure/axis is created.
         """
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
         if approximation is None:
             csop = self._get_csop()
             if not csop.eps_optimizers:

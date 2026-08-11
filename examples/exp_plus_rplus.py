@@ -24,7 +24,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from epsopt_v2 import CSOP, Graph
+from epsopt import CSOP, Graph
 
 
 def main() -> None:

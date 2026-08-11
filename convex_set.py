@@ -93,17 +93,6 @@ class ConvexSet:
         self._ensure_recession_cone_has_nonempty_interior(listGen)
         self.recession_cone_generators = listGen
 
-    def add_recession_cone_generator(self, generator: Sequence[float]) -> None:
-        """Add one generator vector to the polyhedral recession cone."""
-        expected_dim = self._recession_generator_dim()
-        g_list = list(generator)
-        if len(g_list) != expected_dim:
-            raise ValueError(
-                "Recession cone generator must have length "
-                f"{expected_dim}, but got {len(g_list)}."
-            )
-        self.recession_cone_generators.append(g_list)
-
     def remove_redundant_recession_cone_generators(
         self,
         *,

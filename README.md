@@ -11,11 +11,11 @@ Given a convex set-valued function F: R^n ⇉ R^q and some point y ∈ img F, th
 with y ∈ F(x*) and a polyhedral inner γε-H-approximation I of F(x*) for a user-specified tolerance ε > 0 and target point y. Unbounded values (G(0)≠{0}) are supported via user-provided polyhedral recession cone generators.
 ## Installation
 
-No package installation required.  Clone or copy the `epsopt_v2/` folder and add its parent directory to your Python path:
+No package installation required.  Clone or copy the `epsopt/` folder and add its parent directory to your Python path:
 
 ```python
 import sys
-sys.path.insert(0, "/path/to/parent/of/epsopt_v2")
+sys.path.insert(0, "/path/to/parent/of/epsopt")
 import epsopt_v2
 ```
 
