@@ -49,7 +49,7 @@ graph.add_constraint_fn(lambda x, y, z: [
 csop = CSOP(graph)
 result = csop.computeEpsOptimizer(y=np.array([0.5]), eps=0.1)
 
-print(result["x"])      # ε-optimal x*
+print(result["x"])      # γε-optimal x*
 print(result["approx"]) # polyhedral approximation of F(x*)
 ```
 
@@ -80,7 +80,7 @@ In addition to defining a graph with `Graph` to solve a convex set optimization 
 Conceptually, this is done by embedding `S ⊆ ℝ^(n+q)` into a constant set-valued map
 `F: ℝ ⇉ ℝ^(n+q)` with `F(0) = S` and `dom F = {0}`.
 Therefore, approximating `F(0)` is exactly the same as approximating `S`.
-In this formulation, the ε-optimizer routine yields a polyhedral inner approximation of `S` (analogous in spirit to a dual Benson-type inner approximation scheme).
+In this formulation, the ε-optimizer routine yields a polyhedral inner approximation of `S` (analogous in spirit to a dual Benson-type inner approximation scheme with precision `γε`).
 
 `ConvexSet` signature:
 
@@ -145,17 +145,17 @@ graph.add_constraint_fn(lambda x, y, z: [
 The same function is reused internally for the vertex-feasibility constraints in the CP subproblem, so **do not** capture problem-specific cvxpy variables in the closure – use `x`, `y`, `z` as passed.
 
 > **Important:** graph F must be **bounded modulo the stored recession cone**.
-> For unbounded models, provide `recession_cone_generators` (generators of a common recession cone `0^+F`) and make sure the remaining bounded part is compact.
+> For unbounded models, provide `recession_cone_generators` (generators of a common recession cone for all values `0^+F(x)`) and make sure the remaining bounded part is compact.
 > Boundedness modulo the recession cone can be checked by calling `graph.validate(check_bounded = True)`.
 
 > **Important:** graph F must be of **DCP format** (disciplined convex programming).
 > `graph.validate(check_dcp = True)` will additionally check whether your graph constraints are DCP format, i.e. of processable form to the solver cvxpy. Spectrahedral shadows are generally processable. Please refer to https://www.cvxpy.org/tutorial/dcp/index.html for further information on the cvxpy input format.
 
-> However, note that `graph.validate(check_dcp = True, check_bounded = True, check_recession_cone = True)` is automatically called when initializing a `CSOP` object, as `computeEpsOptimizer` poses these requirements on the graph of F.
+> However, note that `graph.validate(check_dcp = True, check_bounded = True, check_recession_cone = True)` is automatically called when initializing a `CSOP` object, as the approximation algorithm `computeEpsOptimizer` poses these requirements on the graph of F.
 
 ### Recession cone generators
 
-If your possesses recession directions, pass recession cone generators directly when constructing `Graph`.
+If your values possess recession directions, pass recession cone generators directly when constructing `Graph`.
 Each generator must be a vector in `R^q`:
 
 ```python
@@ -174,7 +174,7 @@ For `ConvexSet`, the corresponding generator dimension is `n+q`.
 
 ### Projection variables (shadow variables)
 
-When F is defined via a projection (e.g. ∃ z : constraints on (x, y, z)), set `m = dim(z)` and use `z` in the constraint function.  The package creates fresh z-variables for each vertex-feasibility constraint in the subproblem CP automatically.
+When F is defined via a projection (e.g. ∃ z : constraints on (x, y, z)), set `m = dim(z)` and use `z` in the constraint function.
 
 ### Solver selection
 
@@ -191,11 +191,11 @@ This bound is the same for all problems with the same recession cone of image va
 
 ## Algorithm
 
-The algorithm is an inner-approximation scheme:
+The algorithm embeds an inner-approximation scheme:
 
 1. **Initialise** a polyhedral inner approximation I of F(x*) for some initial x* by solving IP(F,x*,p,d) in q directions d.
-2. **Loop**: for each unused outer normal w of I, solve (CP(F,w,I)) to get a candidate y* and a corresponding point x* in the domain.
-    - If y* is outside the current ε-neighbourhood test set, add y* to the approximation and update I and x*.
+2. **Loop**: for each unused outer normal w of I, solve (CP(F,w,I)) to get a candidate y* and a corresponding point x* in the domain with the largest objective value.
+    - If y* is outside the ε-neighbourhood of the current value set, add y* to the approximation and update I and x*.
 3. **Terminate** when all normals of I have been used as CP weights (N ⊆ W) and cannot be shifted further out than the tolerance ε.
 
 The result is guaranteed to satisfy y ∈ F(x*) and x* being a γε-optimizer of the convex set optimization problem defined via graph F under the assumptions above, i.e. ∄ x ∈ R^n : F(x) ⊋ F(x*) and d_H(F(x), F(x*)) > γε.
