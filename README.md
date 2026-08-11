@@ -1,0 +1,203 @@
+# epsopt
+
+**epsopt** is a Python package for computing **ε-optimizers** of convex set-valued optimization problems (CSOPs).
+
+We consider problems where gr F is closed and convex, and where F(x) ⊆ B + 0^+F(x) for a compact set B (for all x ∈ dom F). It follows that all recession cones of the values coincide; denote this common cone by G(0) (value of the recession map at 0), i.e. 0^+F(x) = G(0). We assume G(0) is polyhedral and either int(G(0)) ≠ ∅ or G(0) = {0}.
+
+Given a convex set-valued function F: R^n ⇉ R^q and some point y ∈ img F, the algorithm finds a decision vector x* that is a γε-optimizer of the related set optimization problem, i.e.
+
+∄ x ∈ R^n : F(x) ⊋ F(x*) and d_H(F(x), F(x*)) > γε
+
+with y ∈ F(x*) and a polyhedral inner γε-H-approximation I of F(x*) for a user-specified tolerance ε > 0 and target point y. Unbounded values (G(0)≠{0}) are supported via user-provided polyhedral recession cone generators.
+## Installation
+
+No package installation required.  Clone or copy the `epsopt_v2/` folder and add its parent directory to your Python path:
+
+```python
+import sys
+sys.path.insert(0, "/path/to/parent/of/epsopt_v2")
+import epsopt_v2
+```
+
+**Dependencies:**
+
+| Package | Purpose |
+|---|---|
+| `numpy` | Array operations |
+| `scipy` | ConvexHull for normal computation |
+| `cvxpy` | Convex subproblem modelling and solving |
+| `matplotlib` | Plotting utilities in examples |
+| `pycddlib` | Polar-cone generator computation for q > 1 (required when non-trivial recession cones are used) |
+
+## Quick start
+
+```python
+import numpy as np
+from epsopt_v2 import Graph, CSOP
+
+# 1. Define the graph of F via constraint functions (lambda expressions)
+#    n=1: x ∈ R,  q=1: y ∈ R,  m=0: no projection variable
+graph = Graph(n=1, q=1, name="MyGraph")
+graph.add_constraint_fn(lambda x, y, z: [
+    y[0] >= x[0],
+    y[0] <= x[0] + 1,
+    x[0] >= 0,
+    x[0] <= 1,
+])
+
+# 2. Set up the CSOP and run the algorithm
+csop = CSOP(graph)
+result = csop.computeEpsOptimizer(y=np.array([0.5]), eps=0.1)
+
+print(result["x"])      # ε-optimal x*
+print(result["approx"]) # polyhedral approximation of F(x*)
+```
+
+## Package structure
+
+```
+epsopt/
+├── __init__.py        # public API: ConvexSet, Graph, ConvexSetApproximator, CSOP, CP, IP, SubProblem
+├── convex_set.py      # ConvexSet – generic convex set description via constraint functions
+├── convex_set_approximator.py  # ConvexSetApproximator – lifts a set S to a graph and runs CSOP
+├── graph.py           # Graph – encodes graph F via constraint functions
+├── csop.py            # CSOP  – ε-optimizer algorithm
+├── approximation.py   # Approximation – polyhedral approximation (V-representation + outer normals)
+├── cp.py              # CP    – convex subproblem
+├── ip.py              # IP    – inner-point subproblem
+├── _subproblem.py     # SubProblem – abstract base class for CP and IP
+└── examples/
+    ├── compact_unicriterial.py       # minimal 1-D CSOP example (compact graph, recc = {0})
+    ├── convex_set_approximator_test.py  # tests ConvexSetApproximator in 2D/3D (bounded + unbounded)
+    ├── exp_plus_rplus.py             # CSOP example F(x) = {exp(-x)} + R_+
+    └── portfolio_opt_scenarios.py    # bi-criterial, stochastic 2-scenario portfolio optimization with 2D plotting option
+```
+
+## ConvexSet-based modelling
+
+In addition to defining a graph with `Graph` to solve a convex set optimization problem, the package also supports modelling a convex set `S` and approximating it via `ConvexSetApproximator`.
+
+Conceptually, this is done by embedding `S ⊆ ℝ^(n+q)` into a constant set-valued map
+`F: ℝ ⇉ ℝ^(n+q)` with `F(0) = S` and `dom F = {0}`.
+Therefore, approximating `F(0)` is exactly the same as approximating `S`.
+In this formulation, the ε-optimizer routine yields a polyhedral inner approximation of `S` (analogous in spirit to a dual Benson-type inner approximation scheme).
+
+`ConvexSet` signature:
+
+```python
+ConvexSet(
+    n: int,
+    q: int,
+    m: int = 0,
+    name: str = "ConvexSet",
+    recession_cone_generators: Optional[Sequence[Sequence[float]]] = None,
+)
+```
+
+- `n`: dimension of the first block of set variables (x)
+- `q`: dimension of the second block of set variables (y), optional via `q=0`
+- `m`: dimension of projection variables (z), optional via `m=0`
+
+Constraint function signature for sets:
+
+```python
+fn(x, y, z) -> list[cp.Constraint]
+```
+
+If `q=0`, `y` is `None`; if `m=0`, `z` is `None`.
+
+Minimal example:
+
+```python
+import numpy as np
+import cvxpy as cp
+from epsopt_v2 import ConvexSet, ConvexSetApproximator
+
+S = ConvexSet(n=1, q=1, m=0, name="SimpleSet")
+S.add_constraint_fn(lambda x, y, z: [
+    x[0] >= 0,
+    x[0] <= 1,
+    y[0] >= x[0],
+    y[0] <= x[0] + 1,
+])
+
+approx = ConvexSetApproximator(S)
+result = approx.approximate(y=np.array([0.2, 0.6]), eps=0.1)
+
+# Optional plotting in dimensions n+q = 2 or 3
+approx.plot_approximation(result["approx"], y_choice=result["y_choice"], eps=0.1)
+```
+
+## Modelling guide
+
+### Defining the graph of F
+
+Use `Graph` to describe graph F = { (x, y) : constraints }.  For each constraint block, register a function `fn(x, y, z) -> list[cp.Constraint]`:
+
+```python
+graph = Graph(n=n, q=q, m=m)   # m > 0 only when a projection variable z is needed
+graph.add_constraint_fn(lambda x, y, z: [
+    A @ x + B @ y <= c,
+    x >= 0,
+])
+```
+
+The same function is reused internally for the vertex-feasibility constraints in the CP subproblem, so **do not** capture problem-specific cvxpy variables in the closure – use `x`, `y`, `z` as passed.
+
+> **Important:** graph F must be **bounded modulo the stored recession cone**.
+> For unbounded models, provide `recession_cone_generators` (generators of a common recession cone `0^+F`) and make sure the remaining bounded part is compact.
+> Boundedness modulo the recession cone can be checked by calling `graph.validate(check_bounded = True)`.
+
+> **Important:** graph F must be of **DCP format** (disciplined convex programming).
+> `graph.validate(check_dcp = True)` will additionally check whether your graph constraints are DCP format, i.e. of processable form to the solver cvxpy. Spectrahedral shadows are generally processable. Please refer to https://www.cvxpy.org/tutorial/dcp/index.html for further information on the cvxpy input format.
+
+> However, note that `graph.validate(check_dcp = True, check_bounded = True, check_recession_cone = True)` is automatically called when initializing a `CSOP` object, as `computeEpsOptimizer` poses these requirements on the graph of F.
+
+### Recession cone generators
+
+If your possesses recession directions, pass recession cone generators directly when constructing `Graph`.
+Each generator must be a vector in `R^q`:
+
+```python
+graph = Graph(
+    n=n,
+    q=q,
+    m=m,
+    recession_cone_generators=[
+        [-1.0, 0.0],
+        [0.0, -1.0],
+    ],
+)
+```
+
+For `ConvexSet`, the corresponding generator dimension is `n+q`.
+
+### Projection variables (shadow variables)
+
+When F is defined via a projection (e.g. ∃ z : constraints on (x, y, z)), set `m = dim(z)` and use `z` in the constraint function.  The package creates fresh z-variables for each vertex-feasibility constraint in the subproblem CP automatically.
+
+### Solver selection
+
+Pass a cvxpy solver name to `CSOP` or `CP`/`IP` directly:
+
+```python
+csop = CSOP(graph, solver="MOSEK")
+```
+
+### Optional γ upper bound
+
+`computeEpsOptimizer(..., compute_gamma_upper_bound=True)` additionally returns a computable upper bound for γ (`gamma_upper_bound`).
+This bound is the same for all problems with the same recession cone of image values, since it depends only on generators of the corresponding polar cone. If your recession cone is R^q+, then γ = sqrt(q).
+
+## Algorithm
+
+The algorithm is an inner-approximation scheme:
+
+1. **Initialise** a polyhedral inner approximation I of F(x*) for some initial x* by solving IP(F,x*,p,d) in q directions d.
+2. **Loop**: for each unused outer normal w of I, solve (CP(F,w,I)) to get a candidate y* and a corresponding point x* in the domain.
+    - If y* is outside the current ε-neighbourhood test set, add y* to the approximation and update I and x*.
+3. **Terminate** when all normals of I have been used as CP weights (N ⊆ W) and cannot be shifted further out than the tolerance ε.
+
+The result is guaranteed to satisfy y ∈ F(x*) and x* being a γε-optimizer of the convex set optimization problem defined via graph F under the assumptions above, i.e. ∄ x ∈ R^n : F(x) ⊋ F(x*) and d_H(F(x), F(x*)) > γε.
+
+For more information on the theoretical background and the algorithm, please refer to - insert paper reference -.
