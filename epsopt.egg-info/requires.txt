@@ -1,0 +1,9 @@
+numpy>=1.24
+scipy>=1.10
+cvxpy>=1.4
+
+[examples]
+matplotlib>=3.7
+
+[polycone]
+pycddlib>=2.1

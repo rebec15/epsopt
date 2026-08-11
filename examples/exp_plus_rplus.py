@@ -16,13 +16,8 @@ Recession cone in value space y:
 
 from __future__ import annotations
 
-import os
-import sys
-
 import cvxpy as cp
 import numpy as np
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from epsopt import CSOP, Graph
 

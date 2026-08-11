@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+./__init__.py
+./_subproblem.py
+./approximation.py
+./convex_set.py
+./convex_set_approximator.py
+./cp.py
+./csop.py
+./graph.py
+./ip.py
+epsopt.egg-info/PKG-INFO
+epsopt.egg-info/SOURCES.txt
+epsopt.egg-info/dependency_links.txt
+epsopt.egg-info/requires.txt
+epsopt.egg-info/top_level.txt

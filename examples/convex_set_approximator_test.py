@@ -24,14 +24,9 @@ Unbounded 3D test with positive orthant recession cone:
 
 from __future__ import annotations
 
-import os
-import sys
-
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from epsopt import ConvexSet, ConvexSetApproximator
 

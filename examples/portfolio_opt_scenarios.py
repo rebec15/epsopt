@@ -28,9 +28,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from scipy.spatial import ConvexHull
 
-import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from epsopt.graph import Graph
 from epsopt.csop import CSOP
