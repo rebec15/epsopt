@@ -1,0 +1,10 @@
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
+# Conda environments and metadata
+.conda/
+conda-meta/
+
+# VS Code workspace settings
+.vscode/

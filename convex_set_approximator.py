@@ -28,13 +28,64 @@ class ConvexSetApproximator:
     _graph: Optional[Graph]
     _dirty: bool
     _set : ConvexSet
+    _set_signature: Optional[tuple[Any, ...]]
 
-    def __init__(self, set: ConvexSet,  *, solver: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        convex_set: Optional[ConvexSet] = None,
+        *,
+        solver: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        legacy_set = kwargs.pop("set", None)
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword argument(s): {unknown}")
+
+        if convex_set is None:
+            convex_set = legacy_set
+        elif legacy_set is not None:
+            raise ValueError("Pass either 'convex_set' or legacy 'set', not both.")
+
+        if convex_set is None:
+            raise ValueError("convex_set is required.")
+
         self.solver = solver
         self._csop = None
         self._graph = None
         self._dirty = True
-        self._set = set
+        self._set = convex_set
+        self._set_signature = self._snapshot_set_signature()
+
+    def _snapshot_set_signature(self) -> tuple[Any, ...]:
+        """Build a signature for detecting in-place mutations of the source set."""
+        set_ref = self._set
+        fn_ids = tuple(id(fn) for fn in set_ref._constraint_fns)
+        recc = tuple(
+            tuple(float(v) for v in generator)
+            for generator in set_ref.recession_cone_generators
+        )
+        return (
+            set_ref.n,
+            set_ref.q,
+            set_ref.m,
+            set_ref.name,
+            fn_ids,
+            recc,
+        )
+
+    def _refresh_cache_state(self) -> None:
+        """Invalidate derived objects when the underlying set definition changed."""
+        current = self._snapshot_set_signature()
+        if self._set_signature != current:
+            self.invalidate_cache()
+            self._set_signature = current
+
+    def invalidate_cache(self) -> None:
+        """Force rebuilding Graph/CSOP on next access."""
+        self._graph = None
+        self._csop = None
+        self._dirty = True
 
     def getGraph(self) -> Graph:
         """Lift the convex set S to a graph of a constant set-valued map.
@@ -43,6 +94,8 @@ class ConvexSetApproximator:
         {(0, x, y) in R^(1 + S.n + S.q) : (x,y) in S}
         with a dummy decision variable x in R fixed to 0 -> dom F = {0}.
         """
+        self._refresh_cache_state()
+
         if self._graph is not None and not self._dirty:
             return self._graph
 
@@ -742,8 +795,9 @@ class ConvexSetApproximator:
         return ax
 
     def _get_csop(self) -> CSOP:
-        if self._csop is None or self._dirty:
-            self._csop = CSOP(self.getGraph(), solver=self.solver)
+        graph = self.getGraph()
+        if self._csop is None or self._csop.graph is not graph:
+            self._csop = CSOP(graph, solver=self.solver)
         return self._csop
 
     def __repr__(self) -> str:

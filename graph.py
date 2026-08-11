@@ -172,14 +172,26 @@ class Graph(ConvexSet):
         *,
         solver: Optional[str] = None,
         warm_start: bool = True,
+        accepted_statuses: Optional[Sequence[str]] = None,
+        **solve_kwargs,
     ) -> Optional[str]:
         """Solve CVXPY problem with optional solver fallback."""
+        accepted = set(accepted_statuses) if accepted_statuses is not None else {
+            "optimal",
+            "optimal_inaccurate",
+            "unbounded",
+            "unbounded_inaccurate",
+            "infeasible",
+            "infeasible_inaccurate",
+        }
+
         candidates: List[Optional[str]] = []
         if solver is not None:
             candidates.append(solver)
         candidates.extend([None, "CLARABEL", "SCS"])
 
         seen = set()
+        last_status: Optional[str] = None
         for candidate in candidates:
             key = candidate if candidate is not None else "__default__"
             if key in seen:
@@ -187,13 +199,17 @@ class Graph(ConvexSet):
             seen.add(key)
             try:
                 if candidate is None:
-                    prob.solve(warm_start=warm_start)
+                    prob.solve(warm_start=warm_start, **solve_kwargs)
                 else:
-                    prob.solve(solver=candidate, warm_start=warm_start)
-                return prob.status
+                    prob.solve(solver=candidate, warm_start=warm_start, **solve_kwargs)
+
+                status = prob.status
+                last_status = status
+                if status in accepted:
+                    return status
             except Exception:
                 continue
-        return None
+        return last_status
 
     def _polar_cone_generators(
         self,

@@ -75,22 +75,45 @@ class IP(SubProblem):
         self.y.value = p
         self.t.value = 0.0
 
-        self._problem.solve(solver=solver, warm_start=warm_start, **solver_kwargs)
+        status = self.graph._solve_problem_with_fallback(
+            self._problem,
+            solver=solver,
+            warm_start=warm_start,
+            accepted_statuses=(
+                "optimal",
+                "optimal_inaccurate",
+                "infeasible",
+                "infeasible_inaccurate",
+                "unbounded",
+                "unbounded_inaccurate",
+            ),
+            **solver_kwargs,
+        )
         self._solvecount += 1
 
-        if self._problem.status == "unbounded":
+        if status is None:
+            raise RuntimeError(
+                "Problem IP could not be solved by any available solver. "
+                "Try selecting a different solver or tightening constraints."
+            )
+
+        if status in ("unbounded", "unbounded_inaccurate"):
             raise RuntimeError(
                 "Problem IP is unbounded. Possible issue: The algorithm requires graph F to be bounded (compact). "
                 "Please add upper/lower bounds to your constraints."
             )
-        if self._problem.status in ("infeasible", "infeasible_inaccurate"):
+        if status in ("infeasible", "infeasible_inaccurate"):
             raise RuntimeError(
-                f"Problem IP is infeasible (status: {self._problem.status}). "
+                f"Problem IP is infeasible (status: {status}). "
                 "The base point p may not lie in F(x), or the graph constraints are contradictory."
+            )
+        if status not in ("optimal", "optimal_inaccurate"):
+            raise RuntimeError(
+                f"Problem IP did not converge to an acceptable optimum status (status: {status})."
             )
 
         self.solution = {
-            "status": self._problem.status,
+            "status": status,
             "optval": self._problem.value,
             "t": self.t.value,
             "y": self.y.value,

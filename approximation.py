@@ -375,8 +375,9 @@ class Approximation:
         rounded = np.round(a, decimals=decimals)
         _, idx = np.unique(rounded, axis=0, return_index=True)
         return a[np.sort(idx)]
-    
-    def updateFeasPoint(self, x: np.ndarray) -> None:
+
+
+    def update_feasible_point(self, x: np.ndarray) -> None:
         """Update the feasible point associated with this approximation.
         Called on and managed by the approximation algorithm in csop.py.
 

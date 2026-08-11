@@ -151,6 +151,7 @@ class CSOP:
 
         # Compute initial approximation
         self._computeInitialApproximation(x, y)
+        # Keep one CP instance and let CP.solve() rebuild lazily when vertices change.
         self._cp = CP(self.graph, self._approximation, np.ones(self.graph.q))
 
         if on_iteration is not None:
@@ -224,7 +225,7 @@ class CSOP:
             # y_star ∉ I + (ε/2)B  →  update approximation
             if not self._in_eps_approximation(self.y_star, eps/2):
                 self._approximation.add_vertex(self.y_star)
-                self._approximation.updateFeasPoint(self.x_star)
+                self._approximation.update_feasible_point(self.x_star)
                 N = self._approximation.normals
                 if on_iteration is not None:
                     on_iteration(_iter, copy.deepcopy(self._approximation))
@@ -350,14 +351,24 @@ class CSOP:
         z = cp.Variable(self.graph.m) if self.graph.m>0 else None
         constraints = self.graph.make_constraints(x, y, z if self.graph.m>0 else None)
         problem = cp.Problem(cp.Maximize(0), constraints)
-        problem.solve()
-        if x.value is None:
+        status = self.graph._solve_problem_with_fallback(
+            problem,
+            solver=self.solver,
+            warm_start=True,
+            accepted_statuses=(
+                "optimal",
+                "optimal_inaccurate",
+                "infeasible",
+                "infeasible_inaccurate",
+            ),
+        )
+        if status not in ("optimal", "optimal_inaccurate") or x.value is None:
             raise RuntimeError(
-                f"Could not find a feasible initial point for y={y_val}. "
+                f"Could not find a feasible initial point for y={y_val} (status: {status}). "
                 "The reference point y may lie outside the image of F, or the graph "
                 "constraints are infeasible. Check your constraints and the choice of y."
             )
-        return x.value  
+        return np.asarray(x.value, dtype=float).ravel()
     
     def _computeInitialApproximation(self, x: np.ndarray, y: np.ndarray) -> None:
         self._approximation = Approximation(x, self.graph)  # type: ignore
@@ -374,7 +385,7 @@ class CSOP:
         # Reuse one IP instance and update parameter d each call.
         self._ip = IP(self.graph, x, p, directions[0])
         for d in directions:
-            sol = self._ip.solve(x, p, d)
+            sol = self._ip.solve(x, p, d, solver=self.solver)
             if sol["y"] is None:
                 raise RuntimeError(
                     f"IP subproblem returned no solution for direction d={d} "
