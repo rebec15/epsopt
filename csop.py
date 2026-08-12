@@ -46,7 +46,7 @@ class CSOP:
     eps_optimizers : list of dict
         Accumulated results from all :meth:`computeEpsOptimizer` calls.
         Each entry has keys ``"y_choice"``, ``"eps"``, ``"x"``, ``"approx"``,
-        ``"gamma_upper_bound"``.
+        ``"gamma_upper_bound"``, ``"selected_normals_history"``.
     """
 
     # instance attributes
@@ -108,6 +108,9 @@ class CSOP:
             ``"x"``        – optimal decision vector x* ∈ R^n.
             ``"approx"``   – :class:`~epsopt.approximation.Approximation` of F(x*).
             ``"gamma_upper_bound"`` – computable upper bound for γ from final normals.
+            ``"selected_normals_history"`` – list with one entry per algorithm
+            iteration, storing selected outer normal and whether approximation
+            was updated.
         """
         if eps is None:
             raise ValueError("eps must be provided and must satisfy eps > 0.")
@@ -132,6 +135,8 @@ class CSOP:
 
             # compute initial point x for provided reference y
             x = self._computeInitialPoint(y)
+
+        selected_normals_history: List[dict] = []
 
         # If 0^+F = R^q, every feasible x is an optimizer because F(x) = R^q.
         # Return immediately with a trivial one-point anchor approximation.
@@ -161,6 +166,7 @@ class CSOP:
                 "x": self.x_star,
                 "approx": self._approximation,
                 "gamma_upper_bound": gamma_upper,
+                "selected_normals_history": selected_normals_history,
             }
             self.eps_optimizers.append(result)
             return result
@@ -175,6 +181,7 @@ class CSOP:
 
         W: set[tuple] = set()
         _iter = 1
+        update_snapshot_idx = 0
 
         while True:
             N = self._approximation.normals
@@ -239,12 +246,36 @@ class CSOP:
             self.x_star = best_sol["x"]
 
             # y_star ∉ I + (ε/2)B  →  update approximation
+            updated_approximation = False
+            snapshot_idx: Optional[int] = None
             if not self._in_eps_approximation(self.y_star, eps/2):
+                updated_approximation = True
                 self._approximation.add_vertex(self.y_star)
                 self._approximation.update_feasible_point(self.x_star)
                 N = self._approximation.normals
+                update_snapshot_idx += 1
+                snapshot_idx = update_snapshot_idx
                 if on_iteration is not None:
                     on_iteration(_iter, copy.deepcopy(self._approximation))
+
+            optval_raw = best_sol.get("optval")
+            optval: Optional[float]
+            if optval_raw is None:
+                optval = None
+            else:
+                try:
+                    optval = float(np.asarray(optval_raw).item())
+                except Exception:
+                    optval = None
+
+            selected_normals_history.append({
+                "algorithm_iteration": int(_iter),
+                "selected_outer_normal": np.asarray(best_w, dtype=float).ravel().copy(),
+                "updated_approximation": bool(updated_approximation),
+                "approximation_snapshot_index": snapshot_idx,
+                "cp_status": best_sol.get("status"),
+                "cp_optval": optval,
+            })
             
             _iter += 1
 
@@ -271,6 +302,7 @@ class CSOP:
             "x": self.x_star,
             "approx": self._approximation, # Note: approximation quality = gamma*eps for some gamma > 0
             "gamma_upper_bound": gamma_upper,
+            "selected_normals_history": selected_normals_history,
         })
 
         # return γε-optimizer
@@ -280,6 +312,7 @@ class CSOP:
             "x": self.x_star,
             "approx": self._approximation,
             "gamma_upper_bound": gamma_upper,
+            "selected_normals_history": selected_normals_history,
         })
 
     def _compute_gamma_upper_bound(self, gens: Optional[np.ndarray]) -> Optional[float]:

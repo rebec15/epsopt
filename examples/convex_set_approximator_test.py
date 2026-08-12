@@ -140,7 +140,7 @@ def main() -> None:
         # Test 2: S as unit disk in R^2 (q=0 case).
         set_disk = build_disk_set()
         approximator_disk = ConvexSetApproximator(set_disk)
-        y0_disk = np.array([0.2, 0.3], dtype=float)
+        y0_disk = None
         result_disk = approximator_disk.approximate(y=y0_disk, eps=eps)
 
         print("=== ConvexSetApproximator Test 2 (DiskSet) ===")

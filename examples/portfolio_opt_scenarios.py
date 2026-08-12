@@ -183,7 +183,8 @@ class PortfolioOptScen:
             Collect these to visualise the evolution with plot_iterations().
 
         Returns
-        dict with keys: "y_choice", "x", "eps", "approx"
+        dict with keys: "y_choice", "x", "eps", "approx",
+        "gamma_upper_bound", "selected_normals_history"
         """
 
         result = self.csop.computeEpsOptimizer(
@@ -1194,6 +1195,7 @@ class PortfolioOptScen:
         approx_vertex_color: str = "tomato",
         approx_vertex_size: float = 10,
         vertex_merge_tol: float = 1e-8,
+        selected_normals_history: Optional[List[dict]] = None,
         csv_dir: Optional[str] = None,
         save_to_csv: bool = False,
     ) -> Figure:
@@ -1227,6 +1229,11 @@ class PortfolioOptScen:
         vertex_merge_tol : float
             Tolerance for merging numerically near-identical vertices in snapshots.
             This keeps the displayed marker count and the title count aligned.
+        selected_normals_history : list of dict, optional
+            Algorithm history from run() / CSOP result key
+            ``selected_normals_history``. If provided, this is exported as a
+            dedicated CSV containing the selected outer normal per algorithm
+            iteration.
         """
         # approximate img F once and reuse across all subplots
         y0_img = np.asarray(y_choice, dtype=float).ravel() if y_choice is not None else None
@@ -1372,33 +1379,108 @@ class PortfolioOptScen:
         fig.suptitle(suptitle, fontsize=10, y=0.99)
         fig.tight_layout(rect=(0, 0.08, 1, 0.90))
 
-        # --- CSV export (one file per iteration + one problem info file) ---
+        # --- CSV export (vertices + outer normals per iteration + metadata) ---
         if save_to_csv and csv_dir is not None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             run_dir = os.path.join(csv_dir, timestamp)
             os.makedirs(run_dir, exist_ok=True)
             n_assets = self.graph.n
 
-            # -- per-iteration CSVs: only vertices (y1, y2) and current x --
+            # -- per-iteration CSVs: vertices and outer normals of approximation --
             x_cols = [f"x_{j}" for j in range(n_assets)]
-            iter_header = ["iteration", "iteration_label", "vertex_idx", "vertex y[0]", "vertex y[1]", "n_vertices"] + x_cols
+            iter_vertex_header = ["iteration", "iteration_label", "vertex_idx", "vertex y[0]", "vertex y[1]", "n_vertices"] + x_cols
+            normal_cols = [f"w_{j}" for j in range(self.graph.q)]
+            iter_normal_header = ["iteration", "iteration_label", "normal_idx"] + normal_cols + ["n_normals"] + x_cols
 
             for i, apx in enumerate(approximations):
                 label = "initial" if i == 0 else f"update_{i:03d}"
-                fname = os.path.join(run_dir, f"iter_{i:03d}_{label}.csv")
+                vertex_fname = os.path.join(run_dir, f"iter_{i:03d}_{label}.csv")
+                normal_fname = os.path.join(run_dir, f"iter_{i:03d}_{label}_outer_normals.csv")
                 V = prepared_vertices[i]
                 x_fp = apx.feasiblePoint
                 n_v = len(V) if V is not None else 0
                 V_sorted = self._sort_vertices_clockwise(V) if V is not None else None
                 x_vals = list(x_fp) if x_fp is not None else [""] * n_assets
-                with open(fname, "w", newline="", encoding="utf-8") as fh:
+                with open(vertex_fname, "w", newline="", encoding="utf-8") as fh:
                     writer = csv.writer(fh, delimiter=";")
-                    writer.writerow(iter_header)
+                    writer.writerow(iter_vertex_header)
                     if V_sorted is not None:
                         for vi, vert in enumerate(V_sorted):
                             writer.writerow([i, label, vi, vert[0], vert[1], n_v] + x_vals)
                     else:
                         writer.writerow([i, label, "", "", "", 0] + x_vals)
+
+                N_raw = apx.normals
+                if N_raw is None:
+                    N = np.empty((0, self.graph.q), dtype=float)
+                else:
+                    N = np.asarray(N_raw, dtype=float)
+                    if N.ndim == 1:
+                        N = N.reshape(1, -1)
+                    if N.ndim != 2 or N.shape[1] != self.graph.q:
+                        N = np.empty((0, self.graph.q), dtype=float)
+                    else:
+                        N = self._deduplicate_rows(self._normalize_rows(N))
+
+                with open(normal_fname, "w", newline="", encoding="utf-8") as fh:
+                    writer = csv.writer(fh, delimiter=";")
+                    writer.writerow(iter_normal_header)
+                    if len(N) > 0:
+                        for ni, normal in enumerate(N):
+                            writer.writerow([i, label, ni] + list(normal) + [len(N)] + x_vals)
+                    else:
+                        writer.writerow([i, label, ""] + [""] * self.graph.q + [0] + x_vals)
+
+            if selected_normals_history is not None:
+                selected_cols = [f"selected_w_{j}" for j in range(self.graph.q)]
+                selected_header = [
+                    "algorithm_iteration",
+                    "updated_approximation",
+                    "approximation_snapshot_index",
+                    "approximation_snapshot_label",
+                    "cp_status",
+                    "cp_optval",
+                ] + selected_cols
+                selected_fname = os.path.join(run_dir, "selected_outer_normals.csv")
+
+                with open(selected_fname, "w", newline="", encoding="utf-8") as fh:
+                    writer = csv.writer(fh, delimiter=";")
+                    writer.writerow(selected_header)
+
+                    for row_idx, entry in enumerate(selected_normals_history):
+                        if not isinstance(entry, dict):
+                            continue
+
+                        alg_iter = entry.get("algorithm_iteration", row_idx + 1)
+                        updated = bool(entry.get("updated_approximation", False))
+                        snap_idx_raw = entry.get("approximation_snapshot_index")
+                        if snap_idx_raw is None:
+                            snap_idx = ""
+                            snap_label = ""
+                        else:
+                            try:
+                                snap_idx_int = int(snap_idx_raw)
+                                snap_idx = snap_idx_int
+                                snap_label = "initial" if snap_idx_int == 0 else f"update_{snap_idx_int:03d}"
+                            except Exception:
+                                snap_idx = ""
+                                snap_label = ""
+
+                        w_vals = [""] * self.graph.q
+                        w_raw = entry.get("selected_outer_normal")
+                        if w_raw is not None:
+                            w_arr = np.asarray(w_raw, dtype=float).ravel()
+                            if w_arr.shape == (self.graph.q,):
+                                w_vals = list(w_arr)
+
+                        writer.writerow([
+                            alg_iter,
+                            updated,
+                            snap_idx,
+                            snap_label,
+                            entry.get("cp_status", ""),
+                            entry.get("cp_optval", ""),
+                        ] + w_vals)
 
             # -- problem info CSV: fully describes the problem setting --
             info_fname = os.path.join(run_dir, "problem_info.csv")
@@ -1435,7 +1517,12 @@ class PortfolioOptScen:
                 writer = csv.writer(fh, delimiter=";")
                 writer.writerows(info_rows)
 
-            print(f"Iteration CSVs saved to '{run_dir}/' ({len(approximations)} iteration files + problem_info.csv).")
+            selected_file_count = 1 if selected_normals_history is not None else 0
+            print(
+                f"Iteration CSVs saved to '{run_dir}/' "
+                f"({len(approximations)} vertex files + {len(approximations)} outer-normal files + "
+                f"{selected_file_count} selected-normal file + problem_info.csv)."
+            )
 
         return fig
 
@@ -1495,11 +1582,11 @@ if __name__ == "__main__":
     )
     gamma_upper = result.get("gamma_upper_bound", result.get("L_upper_bound"))
     if gamma_upper is None:
-        gamma_title = "L=n/a"
+        gamma_title = "n/a"
     elif np.isinf(gamma_upper):
-        gamma_title = "L=inf"
+        gamma_title = "inf"
     else:
-        gamma_title = rf"$\gamma <=$ L={float(gamma_upper):.4g}"
+        gamma_title = rf"$\gamma <=$ {float(gamma_upper):.4g}"
 
     ##########################################################################################################################
     
@@ -1512,6 +1599,7 @@ if __name__ == "__main__":
 
     fig = opt.plot_iterations(snapshots, result["y_choice"],
                               gamma_upper_bound=gamma_upper,
+                              selected_normals_history=result.get("selected_normals_history"),
                               csv_dir="portfolio_algorithm_csv", save_to_csv=saveIterToCsv)
     plt.show()
 

@@ -18,7 +18,8 @@ class ConvexSetApproximator:
 
     Parameters
     ----------
-        Graph description of the convex set-valued mapping in DCP format.
+    set : Convex Set in DCP format
+       Graph description of the convex set-valued mapping in DCP format.
     solver : str, optional
         CVXPY solver name used by CSOP.
     """

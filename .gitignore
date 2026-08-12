@@ -8,3 +8,7 @@ conda-meta/
 
 # VS Code workspace settings
 .vscode/
+
+# csv files
+.portfolio_algorithm_csv/
+.portfolio_plots_csv/
