@@ -164,14 +164,15 @@ class PortfolioOptScen:
         self.graph = graph
         self.csop = CSOP(graph, solver=solver)
 
-    def run(self, y0: np.ndarray, verbose: bool = False,
+    def run(self, y0: Optional[np.ndarray] = None, verbose: bool = False,
             compute_gamma_upper_bound: bool = False,
             on_iteration: Optional[Callable[[int, Approximation], None]] = None) -> dict:
         """run gammaEps-optimizer algorithm
 
         Parameters
-        y0 : np.ndarray, shape (2,)
-            starting point in image space = (yield, -risk).
+        y0 : np.ndarray, shape (2,), optional
+            Starting point in image space = (yield, -risk).
+            If None, a feasible point is selected automatically from img F.
         verbose : bool
         compute_gamma_upper_bound : bool
             If True, compute and return/display the upper bound for
@@ -186,8 +187,8 @@ class PortfolioOptScen:
         """
 
         result = self.csop.computeEpsOptimizer(
-            y0,
-            self.epsilon,
+            y=y0,
+            eps=self.epsilon,
             compute_gamma_upper_bound=compute_gamma_upper_bound,
             on_iteration=on_iteration,
         )
@@ -1469,6 +1470,7 @@ if __name__ == "__main__":
     # suggestions: for equal-weight portfolio z0=[0.5, 0.5] in each scenario: y0 = [0.925, -1.1125]
     # or obtain e.g. another other gammaEps-optimizer for y0 = [0.87295635, -0.92557209] (boundary point of img F)
     # or: [1.05, -1.4]
+    # or set y0 = None to auto-select a feasible point in img F
     y0 = np.array([0.87295635, -0.92557209])
 
     epsilon = 0.01

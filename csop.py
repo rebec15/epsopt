@@ -66,15 +66,17 @@ class CSOP:
         solver: Optional[str] = None,
     ) -> None:
         self.graph = graph
+        self.solver = solver
         
         # validate if gr F is dcp-compliant and bounded: necessary for computeEpsOptimizer()
-        self.graph.validate(check_dcp=True,check_bounded=True)
+        self.graph.validate(check_dcp=True, check_bounded=True, solver=self.solver)
 
         self.eps_optimizers: List[dict] = []   # list of {"y", "eps", "x", "approx"}
-        self.solver = solver
 
     def computeEpsOptimizer(
-        self, y: np.ndarray, eps: float,
+        self,
+        y: Optional[np.ndarray] = None,
+        eps: Optional[float] = None,
         compute_gamma_upper_bound: bool = False,
         on_iteration: Optional[Callable[[int, Approximation], None]] = None,
     ) -> dict:
@@ -82,8 +84,10 @@ class CSOP:
 
         Parameters
         ----------
-        y : np.ndarray, shape (q,)
+        y : np.ndarray, shape (q,), optional
             Reference point in image space.  The algorithm finds x* such that y ∈ F(x*) and x* is an optimizer of the problem defined by graph F, i.e. ∄ x ∈ dom F such that F(x*) ⊊ F(x).
+            If ``None``, a feasible reference point is selected automatically
+            by solving a graph feasibility problem.
         eps : float
             Approximation tolerance ε > 0.
         compute_gamma_upper_bound : bool, optional
@@ -105,17 +109,29 @@ class CSOP:
             ``"approx"``   – :class:`~epsopt.approximation.Approximation` of F(x*).
             ``"gamma_upper_bound"`` – computable upper bound for γ from final normals.
         """
-        y = np.asarray(y, dtype=float).ravel()
-        if y.shape != (self.graph.q,):
-            raise ValueError(
-                f"y must have shape ({self.graph.q},) matching graph.q, but has shape {y.shape}."
-            )
+        if eps is None:
+            raise ValueError("eps must be provided and must satisfy eps > 0.")
         if eps <= 0:
             raise ValueError(f"eps must be > 0, but was set to {eps}.")
         delta = min(eps / 4.0, 0.001) # allow for tolerance in solvers of at most eps/4 -> feasibility and duality gap
 
-        # compute initial point
-        x = self._computeInitialPoint(y)
+        if y is None:
+            try:
+                x, y = self.graph.find_feasible_point(solver=self.solver)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    "No reference point y was provided and no feasible graph point could be found. "
+                    "This indicates that dom F is empty (hence img F is empty) or that feasibility could not be certified."
+                ) from exc
+        else:
+            y = np.asarray(y, dtype=float).ravel()
+            if y.shape != (self.graph.q,):
+                raise ValueError(
+                    f"y must have shape ({self.graph.q},) matching graph.q, but has shape {y.shape}."
+                )
+
+            # compute initial point x for provided reference y
+            x = self._computeInitialPoint(y)
 
         # If 0^+F = R^q, every feasible x is an optimizer because F(x) = R^q.
         # Return immediately with a trivial one-point anchor approximation.

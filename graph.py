@@ -86,7 +86,102 @@ class Graph(ConvexSet):
         except Exception:
             return False
 
-    def is_bounded(self, *, solver: Optional[str] = None) -> bool:
+    def find_feasible_point(
+        self,
+        *,
+        solver: Optional[str] = None,
+        warm_start: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return one feasible pair ``(x, y)`` with ``(x, y) in gr F``.
+
+        This method certifies that ``img F`` is nonempty by solving a pure
+        feasibility problem over the graph constraints.
+
+        Parameters
+        ----------
+        solver : str, optional
+            CVXPY solver to use for the feasibility check.
+        warm_start : bool, optional
+            Forwarded to CVXPY solve(). Defaults to True.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A feasible decision-image pair ``(x, y)``.
+
+        Raises
+        ------
+        RuntimeError
+            If the graph is infeasible (empty domain/image) or if no reliable
+            feasibility status can be obtained.
+        """
+        if not self._constraint_fns:
+            raise RuntimeError(
+                "Graph has no constraints. Please add constraints via add_constraint_fn()."
+            )
+
+        x = cp.Variable(self.n, name="_feas_x")
+        y = cp.Variable(self.q, name="_feas_y")
+        z = cp.Variable(self.m, name="_feas_z") if self.m > 0 else None
+
+        try:
+            constraints = self.make_constraints(x, y, z)
+        except Exception as exc:
+            raise RuntimeError(
+                "Could not build graph constraints for feasibility check."
+            ) from exc
+
+        prob = cp.Problem(cp.Minimize(0), constraints)
+        status = self._solve_problem_with_fallback(
+            prob,
+            solver=solver,
+            warm_start=warm_start,
+            accepted_statuses=(
+                "optimal",
+                "optimal_inaccurate",
+                "infeasible",
+                "infeasible_inaccurate",
+            ),
+        )
+
+        if status in ("infeasible", "infeasible_inaccurate"):
+            raise RuntimeError(
+                "Graph is infeasible: dom F is empty (equivalently, img F is empty)."
+            )
+        if status not in ("optimal", "optimal_inaccurate"):
+            raise RuntimeError(
+                "Could not certify graph feasibility. "
+                f"Solver ended with status: {status}."
+            )
+        if x.value is None or y.value is None:
+            raise RuntimeError(
+                "Feasibility solve reported optimal status but returned no variable values."
+            )
+
+        return (
+            np.asarray(x.value, dtype=float).ravel(),
+            np.asarray(y.value, dtype=float).ravel(),
+        )
+
+    def has_nonempty_image(
+        self,
+        *,
+        solver: Optional[str] = None,
+        warm_start: bool = True,
+    ) -> bool:
+        """Return True iff the graph has at least one feasible pair ``(x, y)``."""
+        try:
+            self.find_feasible_point(solver=solver, warm_start=warm_start)
+            return True
+        except RuntimeError:
+            return False
+
+    def is_bounded(
+        self,
+        *,
+        solver: Optional[str] = None,
+        assume_feasible: bool = False,
+    ) -> bool:
         """Check whether img F is bounded modulo the stored recession cone.
 
         Let K = cone(self.recession_cone_generators). We compute a generating
@@ -105,6 +200,9 @@ class Graph(ConvexSet):
         ----------
         solver : str, optional
             CVXPY solver to use for boundedness checks.
+        assume_feasible : bool, optional
+            If True, skip the feasibility pre-check for ``img F`` and assume
+            feasibility has already been established externally.
 
         Returns
         -------
@@ -132,15 +230,16 @@ class Graph(ConvexSet):
         except Exception:
             return False
 
-        # Feasibility pre-check for img F: Return false if img F is empty
-        feas_prob = cp.Problem(cp.Minimize(0), constraints)
-        feas_status = self._solve_problem_with_fallback(
-            feas_prob,
-            solver=solver,
-            warm_start=True,
-        )
-        if feas_status not in ("optimal", "optimal_inaccurate"):
-            return False
+        if not assume_feasible:
+            # Feasibility pre-check for img F: return false if img F is empty.
+            feas_prob = cp.Problem(cp.Minimize(0), constraints)
+            feas_status = self._solve_problem_with_fallback(
+                feas_prob,
+                solver=solver,
+                warm_start=True,
+            )
+            if feas_status not in ("optimal", "optimal_inaccurate"):
+                return False
 
         directions, polar_is_zero = self._polar_cone_generators(
             G,
@@ -341,6 +440,7 @@ class Graph(ConvexSet):
         check_dcp: bool = False,
         check_bounded: bool = False,
         check_recession_cone: bool = False,
+        solver: Optional[str] = None,
     ) -> None:
         """Check that the graph is properly defined.
 
@@ -359,6 +459,8 @@ class Graph(ConvexSet):
             nonempty interior or it is the trivial cone {0}.
             Raises RuntimeError when the check fails.
             Default is False (skip this check).
+        solver : str, optional
+            CVXPY solver used for feasibility and boundedness checks.
 
         Note: For this package, the algorithm in csop.py requires graph F to
         be bounded (compact image sets F(x)).
@@ -387,7 +489,12 @@ class Graph(ConvexSet):
                 ) from exc
             print("Recession cone has full dimension or is {0}.")
         if check_bounded:
-            if not self.is_bounded():
+            if not self.has_nonempty_image(solver=solver):
+                raise RuntimeError(
+                    "Graph is infeasible: dom F is empty (equivalently, img F is empty). "
+                    "No pair (x, y) satisfies the graph constraints."
+                )
+            if not self.is_bounded(solver=solver, assume_feasible=True):
                 raise RuntimeError(
                     "Graph graph F is not bounded. "
                     "The algorithm requires that img F ⊆ B + 0^+F(x) for some compact B. "

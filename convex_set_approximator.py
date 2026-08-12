@@ -121,10 +121,17 @@ class ConvexSetApproximator:
         self._dirty = False
         return self._graph
 
-    def approximate(self, y: np.ndarray, eps: float) -> dict:
-        """Compute an epsilon-optimizer and return a polyhedral approximation."""
+    def approximate(self, y: Optional[np.ndarray] = None, eps: Optional[float] = None) -> dict:
+        """Compute an epsilon-optimizer and return a polyhedral approximation.
+
+        If ``y`` is omitted, a feasible reference point is selected
+        automatically from the graph.
+        """
+        if eps is None:
+            raise ValueError("eps must be provided and must satisfy eps > 0.")
         csop = self._get_csop()
-        return csop.computeEpsOptimizer(y=np.asarray(y, dtype=float), eps=eps)
+        y_arg = None if y is None else np.asarray(y, dtype=float)
+        return csop.computeEpsOptimizer(y=y_arg, eps=eps)
 
     @staticmethod
     def _normalized_recession_rays(generators: np.ndarray, dim: int) -> np.ndarray:
