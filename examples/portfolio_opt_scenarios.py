@@ -1605,11 +1605,11 @@ if __name__ == "__main__":
 
     ##########################################################################################################################
 
-    # Optional: plotting of some values F(x) to visualize flexibility effect
+    # Optional: plotting of some values F(x) to visualize flexibility effect 
     plotFx = False
     saveFxToCsv = False
 
-    x1 = np.array([0.621, 0.379]) 
+    x1 = np.array([0.6021884827561648,0.3978198410906197]) 
     x2 = np.array([0.85, 0.15])   
 
     if(plotFx):

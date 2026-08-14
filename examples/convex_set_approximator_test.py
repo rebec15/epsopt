@@ -24,6 +24,9 @@ Unbounded 3D test with positive orthant recession cone:
 
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
@@ -111,9 +114,56 @@ def build_unbounded_orthant_3d_set() -> ConvexSet:
     return set_s
 
 
+def sort_vertices_clockwise_2d(vertices: np.ndarray) -> np.ndarray:
+    """Return unique 2D vertices sorted clockwise (stable start point)."""
+    verts = np.asarray(vertices, dtype=float)
+    if verts.ndim != 2 or verts.shape[1] != 2:
+        raise ValueError("Expected 2D vertices with shape (k, 2).")
+    if len(verts) == 0:
+        return verts.copy()
+
+    rounded = np.round(verts, decimals=12)
+    _, idx = np.unique(rounded, axis=0, return_index=True)
+    unique_verts = verts[np.sort(idx)]
+    if len(unique_verts) <= 1:
+        return unique_verts
+
+    center = unique_verts.mean(axis=0)
+    angles = np.arctan2(unique_verts[:, 1] - center[1], unique_verts[:, 0] - center[0])
+    clockwise = unique_verts[np.argsort(-angles)]
+
+    start = int(np.lexsort((clockwise[:, 1], clockwise[:, 0]))[0])
+    return np.roll(clockwise, -start, axis=0)
+
+
+def export_2d_vertices_csv(approximation, output_name: str) -> Path | None:
+    """Export 2D approximation vertices to CSV in clockwise order."""
+    vertices = approximation.vertices
+    if vertices is None:
+        return None
+
+    verts = np.asarray(vertices, dtype=float)
+    if verts.ndim != 2 or verts.shape[1] != 2:
+        return None
+
+    ordered = sort_vertices_clockwise_2d(verts)
+    output_dir = Path(__file__).resolve().parents[1] / "approx_vertices_csv"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / output_name
+
+    with output_path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["vertex_index", "s1", "s2"])
+        for idx, vertex in enumerate(ordered):
+            writer.writerow([idx, float(vertex[0]), float(vertex[1])])
+
+    return output_path
+
+
 def main() -> None:
     eps = 0.01
     tests = np.array([False, True, False, False, False], dtype=bool)  # choose test sets
+    save_vertices_csv = False  # set to False to disable CSV export
 
     if(tests[0]):
         # Test 1: S in R^(n+q) with n=1, q=1.
@@ -128,6 +178,10 @@ def main() -> None:
         print(f"eps              = {result_interval['eps']}")
         print(f"optimizer x*     = {result_interval['x']}")
         print(f"approximation    = {result_interval['approx']}")
+        if save_vertices_csv:
+            csv_path = export_2d_vertices_csv(result_interval["approx"], f"{set_interval.name}_vertices.csv")
+            if csv_path is not None:
+                print(f"vertices csv     = {csv_path}")
         approximator_interval.plot_approximation(
             result_interval["approx"],
             y_choice=result_interval["y_choice"],
@@ -149,6 +203,10 @@ def main() -> None:
         print(f"eps              = {result_disk['eps']}")
         print(f"optimizer x*     = {result_disk['x']}")
         print(f"approximation    = {result_disk['approx']}")
+        if save_vertices_csv:
+            csv_path = export_2d_vertices_csv(result_disk["approx"], f"{set_disk.name}_vertices.csv")
+            if csv_path is not None:
+                print(f"vertices csv     = {csv_path}")
         approximator_disk.plot_approximation(
             result_disk["approx"],
             y_choice=result_disk["y_choice"],
@@ -192,6 +250,10 @@ def main() -> None:
         print(f"optimizer x*     = {result_plus['x']}")
         print(f"approximation    = {result_plus['approx']}")
         print(f"recc generators  = {set_plus.recession_cone_generators}")
+        if save_vertices_csv:
+            csv_path = export_2d_vertices_csv(result_plus["approx"], f"{set_plus.name}_vertices.csv")
+            if csv_path is not None:
+                print(f"vertices csv     = {csv_path}")
         approximator_plus.plot_approximation(
             result_plus["approx"],
             y_choice=result_plus["y_choice"],
