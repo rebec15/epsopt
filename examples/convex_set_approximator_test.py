@@ -161,9 +161,9 @@ def export_2d_vertices_csv(approximation, output_name: str) -> Path | None:
 
 
 def main() -> None:
-    eps = 0.01
+    eps = 0.1
     tests = np.array([False, True, False, False, False], dtype=bool)  # choose test sets
-    save_vertices_csv = False  # set to False to disable CSV export
+    save_vertices_csv = False # set to False to disable CSV export
 
     if(tests[0]):
         # Test 1: S in R^(n+q) with n=1, q=1.
