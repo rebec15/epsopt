@@ -548,9 +548,9 @@ class CSOP:
         return bool(prob.value is not None and prob.value <= eps)  # type: ignore[operator]
 
     def _compute_dual_direction_of_recession_cone(self) -> np.ndarray:
-        """Compute a nonzero direction y* in G(0)^+ from stored generators.
+        """Compute a nonzero direction y* in -G(0)^° from stored generators.
 
-        Uses SOCPs of the form max a^T y s.t. C y >= 0, ||y||_2 <= 1.
+        Uses SOCPs of the form max Σ(y^T c^i) s.t. C y >= 0, ||y||_2 <= 1.
         """
         q = self.graph.q
         gens_raw = getattr(self.graph, "recession_cone_generators", [])
@@ -567,38 +567,34 @@ class CSOP:
 
         y_var = cp.Variable(q)
         constraints = [cp.norm(y_var, 2) <= 1, C @ y_var >= 0]
-        objectives: List[np.ndarray] = [np.ones(q)] + [np.eye(q)[i] for i in range(q)]
+        # Objective: sum_i (c^i)^T y for rows c^i of C.
+        prob = cp.Problem(cp.Maximize(cp.sum(C @ y_var)), constraints)
+        status = self.graph._solve_problem_with_fallback(
+            prob,
+            solver=self.solver,
+            warm_start=True,
+            accepted_statuses=(
+                "optimal",
+                "optimal_inaccurate",
+                "infeasible",
+                "infeasible_inaccurate",
+            ),
+        )
 
-        best: Optional[np.ndarray] = None
-        best_obj = -np.inf
-        for a in objectives:
-            prob = cp.Problem(cp.Maximize(a @ y_var), constraints)
-            try:
-                prob.solve(solver=self.solver)
-            except Exception:
-                try:
-                    prob.solve(solver="CLARABEL")
-                except Exception:
-                    try:
-                        prob.solve(solver="SCS")
-                    except Exception:
-                        continue
-
-            if y_var.value is None:
-                continue
-            cand = np.asarray(y_var.value, dtype=float).ravel()
-            nrm = np.linalg.norm(cand)
-            val = float(a @ cand)
-            if nrm > 1e-10 and np.isfinite(val) and val > best_obj:
-                best = cand / nrm
-                best_obj = val
-
-        if best is None:
+        if status not in ("optimal", "optimal_inaccurate") or y_var.value is None:
             raise RuntimeError(
-                "Could not compute a nonzero direction y* in the dual cone G(0)^+. "
-                "Please verify recession_cone_generators in the graph."
+                "Could not solve the SOCP for dual direction computation "
+                f"(status: {status}). Please verify recession_cone_generators in the graph."
             )
-        return best
+
+        cand = np.asarray(y_var.value, dtype=float).ravel()
+        nrm = float(np.linalg.norm(cand))
+        if not np.isfinite(nrm) or nrm <= 1e-10:
+            raise RuntimeError(
+                "SOCP solved, but returned the zero vector. "
+                "The chosen objective may be degenerate for this cone."
+            )
+        return cand / nrm
 
     def _recession_cone_is_full_space(self) -> bool:
         """Return True if the stored recession cone equals R^q.
