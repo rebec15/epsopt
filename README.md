@@ -2,6 +2,8 @@
 
 **epsopt** is a Python package for computing **ε-optimizers** of convex set-valued optimization problems (CSOPs).
 
+Source repository: [github.com/rebec15/epsopt](https://github.com/rebec15/epsopt)
+
 We consider problems where gr F is closed and convex, and where F(x) ⊆ B + 0^+F(x) for a compact set B (for all x ∈ dom F). It follows that all recession cones of the values coincide; denote this common cone by G(0) (value of the recession map at 0), i.e. 0^+F(x) = G(0). We assume G(0) is polyhedral and either int(G(0)) ≠ ∅ or G(0) = {0}.
 
 Given a convex set-valued function F: R^n ⇉ R^q and some point y ∈ img F, the algorithm finds a decision vector x* that is a γε-optimizer of the related set optimization problem, i.e.
