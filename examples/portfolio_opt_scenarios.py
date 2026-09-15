@@ -1594,7 +1594,7 @@ if __name__ == "__main__":
     saveIterToCsv = False
 
     ax = opt.plot(result["approx"], result["y_choice"])
-    ax.set_title(rf"img $F$ with $\gamma \varepsilon$-approximation of F(x) ($\varepsilon$ = {epsilon}, {gamma_title})")
+    ax.set_title(rf"img $F$ with $\gamma \varepsilon$-approximation of F(x) for $\gamma \varepsilon$-optimizer x ($\varepsilon$ = {epsilon}, {gamma_title})")
     plt.tight_layout()
 
     fig = opt.plot_iterations(snapshots, result["y_choice"],

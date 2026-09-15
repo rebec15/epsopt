@@ -82,6 +82,54 @@ epsopt/
     └── portfolio_opt_scenarios.py    # bi-criterial, stochastic 2-scenario portfolio optimization with 2D plotting option
 ```
 
+## Modelling guide
+
+### Defining the graph of F
+
+Use `Graph` to describe graph F = { (x, y) : constraints }.  For each constraint block, register a function `fn(x, y, z) -> list[cp.Constraint]`:
+
+```python
+graph = Graph(n=n, q=q, m=m)   # m > 0 only when a projection variable z is needed
+graph.add_constraint_fn(lambda x, y, z: [
+    A @ x + B @ y <= c,
+    x >= 0,
+])
+```
+
+The same function is reused internally for the vertex-feasibility constraints in the CP subproblem, so **do not** capture problem-specific cvxpy variables in the closure – use `x`, `y`, `z` as passed.
+
+> **Important:** graph F must be **bounded modulo the stored recession cone**.
+> For unbounded models, provide `recession_cone_generators` (generators of a common recession cone for all values `0^+F(x)`) and make sure the remaining bounded part is compact.
+> Boundedness modulo the recession cone can be checked by calling `graph.validate(check_bounded = True)`.
+
+> **Important:** graph F must be of **DCP format** (disciplined convex programming).
+> `graph.validate(check_dcp = True)` will additionally check whether your graph constraints are DCP format, i.e. of processable form to the solver cvxpy. Spectrahedral shadows are generally processable. Please refer to https://www.cvxpy.org/tutorial/dcp/index.html for further information on the cvxpy input format.
+
+> However, note that `graph.validate(check_dcp = True, check_bounded = True, check_recession_cone = True)` is automatically called when initializing a `CSOP` object, as the approximation algorithm `computeEpsOptimizer` poses these requirements on the graph of F.
+
+### Recession cone generators
+
+If your values possess recession directions, pass recession cone generators directly when constructing `Graph`.
+Each generator must be a vector in `R^q`:
+
+```python
+graph = Graph(
+    n=n,
+    q=q,
+    m=m,
+    recession_cone_generators=[
+        [-1.0, 0.0],
+        [0.0, -1.0],
+    ],
+)
+```
+
+For `ConvexSet`, the corresponding generator dimension is `n+q`.
+
+### Projection variables (shadow variables)
+
+When F is defined via a projection (e.g. ∃ z : constraints on (x, y, z)), set `m = dim(z)` and use `z` in the constraint function.
+
 ## ConvexSet-based modelling
 
 In addition to defining a graph with `Graph` to solve a convex set optimization problem, the package also supports modelling a convex set `S` and approximating it via `ConvexSetApproximator`.
@@ -137,54 +185,6 @@ result = approx.approximate(y=np.array([0.2, 0.6]), eps=0.1)
 approx.plot_approximation(result["approx"], y_choice=result["y_choice"], eps=0.1)
 ```
 
-## Modelling guide
-
-### Defining the graph of F
-
-Use `Graph` to describe graph F = { (x, y) : constraints }.  For each constraint block, register a function `fn(x, y, z) -> list[cp.Constraint]`:
-
-```python
-graph = Graph(n=n, q=q, m=m)   # m > 0 only when a projection variable z is needed
-graph.add_constraint_fn(lambda x, y, z: [
-    A @ x + B @ y <= c,
-    x >= 0,
-])
-```
-
-The same function is reused internally for the vertex-feasibility constraints in the CP subproblem, so **do not** capture problem-specific cvxpy variables in the closure – use `x`, `y`, `z` as passed.
-
-> **Important:** graph F must be **bounded modulo the stored recession cone**.
-> For unbounded models, provide `recession_cone_generators` (generators of a common recession cone for all values `0^+F(x)`) and make sure the remaining bounded part is compact.
-> Boundedness modulo the recession cone can be checked by calling `graph.validate(check_bounded = True)`.
-
-> **Important:** graph F must be of **DCP format** (disciplined convex programming).
-> `graph.validate(check_dcp = True)` will additionally check whether your graph constraints are DCP format, i.e. of processable form to the solver cvxpy. Spectrahedral shadows are generally processable. Please refer to https://www.cvxpy.org/tutorial/dcp/index.html for further information on the cvxpy input format.
-
-> However, note that `graph.validate(check_dcp = True, check_bounded = True, check_recession_cone = True)` is automatically called when initializing a `CSOP` object, as the approximation algorithm `computeEpsOptimizer` poses these requirements on the graph of F.
-
-### Recession cone generators
-
-If your values possess recession directions, pass recession cone generators directly when constructing `Graph`.
-Each generator must be a vector in `R^q`:
-
-```python
-graph = Graph(
-    n=n,
-    q=q,
-    m=m,
-    recession_cone_generators=[
-        [-1.0, 0.0],
-        [0.0, -1.0],
-    ],
-)
-```
-
-For `ConvexSet`, the corresponding generator dimension is `n+q`.
-
-### Projection variables (shadow variables)
-
-When F is defined via a projection (e.g. ∃ z : constraints on (x, y, z)), set `m = dim(z)` and use `z` in the constraint function.
-
 ### Solver selection
 
 Pass a cvxpy solver name to `CSOP` or `CP`/`IP` directly:
@@ -200,7 +200,7 @@ This bound is the same for all problems with the same recession cone of image va
 
 ## Algorithm
 
-The algorithm embeds an inner-approximation scheme:
+The algorithm in `CSOP.computeEpsOptimizer()` embeds an inner-approximation scheme:
 
 1. **Initialise** a polyhedral inner approximation I of F(x*) for some initial x* by solving IP(F,x*,p,d) in q directions d.
 2. **Loop**: for each unused outer normal w of I, solve (CP(F,w,I)) to get a candidate y* and a corresponding point x* in the domain with the largest objective value.
